@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import jwt, { JwtPayload } from "jsonwebtoken";
+import { isValidObjectId } from "mongoose";
 
 export interface AuthRequest extends Request {
   userId?: string;
@@ -26,7 +27,10 @@ export function authenticate(
   try {
     const decodedToken = jwt.verify(token, jwtSecret) as JwtPayload;
 
-    if (!decodedToken.userId) {
+    if (
+      typeof decodedToken.userId !== "string" ||
+      !isValidObjectId(decodedToken.userId)
+    ) {
       return response.status(401).json({ message: "Missing or invalid token." });
     }
 
