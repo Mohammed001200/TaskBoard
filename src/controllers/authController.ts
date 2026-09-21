@@ -5,7 +5,7 @@ import User from "../models/User";
 
 export async function register(request: Request, response: Response) {
   try {
-    const { name, email, password } = request.body;
+    const { name, email, password } = request.body ?? {};
 
     if (
       typeof name !== "string" ||
@@ -44,7 +44,7 @@ export async function register(request: Request, response: Response) {
 
 export async function login(request: Request, response: Response) {
   try {
-    const { email, password } = request.body;
+    const { email, password } = request.body ?? {};
 
     if (
       typeof email !== "string" ||
