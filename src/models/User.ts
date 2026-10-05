@@ -1,24 +1,30 @@
 import { model, Schema } from "mongoose";
-
-const userSchema = new Schema({
-  name: {
-    type: String,
-    required: true,
-    trim: true,
+import { IUser } from "../interfaces/models";
+const userSchema = new Schema<IUser>(
+  {
+    name: { type: String, required: true, trim: true, maxlength: 100 },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+      maxlength: 254,
+      match: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+    },
+    password: { type: String, required: true, select: false },
+    isAdmin: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null },
   },
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    lowercase: true,
-    trim: true,
+  {
+    timestamps: true,
+    toJSON: {
+      transform: (_doc, result) => {
+        Reflect.deleteProperty(result, "password");
+        Reflect.deleteProperty(result, "__v");
+        return result;
+      },
+    },
   },
-  password: {
-    type: String,
-    required: true,
-  },
-});
-
-const User = model("User", userSchema);
-
-export default User;
+);
+export default model<IUser>("User", userSchema);

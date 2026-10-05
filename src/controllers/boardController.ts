@@ -1,62 +1,55 @@
 import { Response } from "express";
-import { isValidObjectId } from "mongoose";
 import { AuthRequest } from "../middleware/authMiddleware";
 import Board from "../models/Board";
-import { getTeamAccess } from "../utils/teamAccess";
+import { requireBoardAccess, requireTeamAccess } from "../utils/teamAccess";
 
 export async function createBoard(request: AuthRequest, response: Response) {
-  try {
-    const { teamId } = request.params;
-    const { title } = request.body ?? {};
-
-    if (typeof title !== "string" || !title.trim()) {
-      return response.status(400).json({ message: "Board title is required." });
-    }
-
-    if (typeof teamId !== "string" || !isValidObjectId(teamId)) {
-      return response.status(404).json({ message: "Team not found." });
-    }
-
-    const { team, role } = await getTeamAccess(teamId, request.userId!);
-
-    if (!team) {
-      return response.status(404).json({ message: "Team not found." });
-    }
-
-    if (role !== "admin") {
-      return response.status(403).json({ message: "Admin access is required." });
-    }
-
-    const board = await Board.create({ title: title.trim(), teamId });
-    return response.status(201).json(board);
-  } catch (error) {
-    console.error("Could not create board:", error);
-    return response.status(500).json({ message: "Could not create board." });
-  }
+  const { team } = await requireTeamAccess(
+    request.params.teamId as string,
+    request.userId!,
+    true,
+  );
+  const board = await Board.create({
+    title: request.body.title,
+    teamId: team._id,
+  });
+  return response.status(201).json(board);
 }
 
 export async function getBoards(request: AuthRequest, response: Response) {
-  try {
-    const { teamId } = request.params;
+  const { team } = await requireTeamAccess(
+    request.params.teamId as string,
+    request.userId!,
+  );
+  return response.json(await Board.find({ teamId: team._id, deletedAt: null }));
+}
 
-    if (typeof teamId !== "string" || !isValidObjectId(teamId)) {
-      return response.status(404).json({ message: "Team not found." });
-    }
+export async function getBoard(request: AuthRequest, response: Response) {
+  const { board } = await requireBoardAccess(
+    request.params.boardId as string,
+    request.userId!,
+  );
+  return response.json(board);
+}
 
-    const { team, role } = await getTeamAccess(teamId, request.userId!);
+export async function updateBoard(request: AuthRequest, response: Response) {
+  const { board } = await requireBoardAccess(
+    request.params.boardId as string,
+    request.userId!,
+    true,
+  );
+  board.title = request.body.title;
+  await board.save();
+  return response.json(board);
+}
 
-    if (!team) {
-      return response.status(404).json({ message: "Team not found." });
-    }
-
-    if (!role) {
-      return response.status(403).json({ message: "Team access is required." });
-    }
-
-    const boards = await Board.find({ teamId });
-    return response.json(boards);
-  } catch (error) {
-    console.error("Could not get boards:", error);
-    return response.status(500).json({ message: "Could not get boards." });
-  }
+export async function deleteBoard(request: AuthRequest, response: Response) {
+  const { board } = await requireBoardAccess(
+    request.params.boardId as string,
+    request.userId!,
+    true,
+  );
+  board.deletedAt = new Date();
+  await board.save();
+  return response.json({ message: "Board deleted successfully." });
 }

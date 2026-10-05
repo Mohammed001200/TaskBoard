@@ -1,42 +1,37 @@
 import { NextFunction, Request, Response } from "express";
-import jwt, { JwtPayload } from "jsonwebtoken";
-import { isValidObjectId } from "mongoose";
-
+import jwt from "jsonwebtoken";
+import { z } from "zod";
+import User from "../models/User";
+import { UnauthorizedError } from "../errors/AppError";
 export interface AuthRequest extends Request {
   userId?: string;
+  isAdmin?: boolean;
 }
-
-export function authenticate(
+const authorizationSchema = z
+  .string()
+  .regex(/^Bearer [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+const identitySchema = z.object({ userId: z.string().regex(/^[a-f\d]{24}$/i) });
+export async function authenticate(
   request: AuthRequest,
-  response: Response,
+  _response: Response,
   next: NextFunction,
 ) {
-  const authorizationHeader = request.headers.authorization;
-
-  if (!authorizationHeader?.startsWith("Bearer ")) {
-    return response.status(401).json({ message: "Missing or invalid token." });
-  }
-
-  const token = authorizationHeader.split(" ")[1];
+  const header = authorizationSchema.safeParse(request.headers.authorization);
+  if (!header.success) throw new UnauthorizedError();
   const jwtSecret = process.env.JWT_SECRET;
-
-  if (!jwtSecret) {
-    return response.status(500).json({ message: "JWT secret is not configured." });
-  }
-
+  if (!jwtSecret) throw new Error("JWT configuration is missing.");
+  let identity: z.infer<typeof identitySchema>;
   try {
-    const decodedToken = jwt.verify(token, jwtSecret) as JwtPayload;
-
-    if (
-      typeof decodedToken.userId !== "string" ||
-      !isValidObjectId(decodedToken.userId)
-    ) {
-      return response.status(401).json({ message: "Missing or invalid token." });
-    }
-
-    request.userId = decodedToken.userId;
-    next();
+    identity = identitySchema.parse(
+      jwt.verify(header.data.slice(7), jwtSecret, { algorithms: ["HS256"] }),
+    );
   } catch {
-    return response.status(401).json({ message: "Missing or invalid token." });
+    throw new UnauthorizedError();
   }
+  // Current DB state prevents stale tokens restoring deleted accounts or admin permission.
+  const user = await User.findOne({ _id: identity.userId, deletedAt: null });
+  if (!user) throw new UnauthorizedError();
+  request.userId = user._id.toString();
+  request.isAdmin = user.isAdmin;
+  next();
 }
