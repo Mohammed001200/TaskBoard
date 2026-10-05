@@ -1,18 +1,16 @@
 import { model, Schema } from "mongoose";
-
-const boardSchema = new Schema({
-  title: {
-    type: String,
-    required: true,
-    trim: true,
+import { IBoard } from "../interfaces/models";
+const boardSchema = new Schema<IBoard>(
+  {
+    title: { type: String, required: true, trim: true, maxlength: 200 },
+    teamId: {
+      type: Schema.Types.ObjectId,
+      ref: "Team",
+      required: true,
+      index: true,
+    },
+    deletedAt: { type: Date, default: null },
   },
-  teamId: {
-    type: Schema.Types.ObjectId,
-    ref: "Team",
-    required: true,
-  },
-});
-
-const Board = model("Board", boardSchema);
-
-export default Board;
+  { timestamps: true },
+);
+export default model<IBoard>("Board", boardSchema);

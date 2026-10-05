@@ -1,93 +1,103 @@
 import { Response } from "express";
-import { isValidObjectId } from "mongoose";
+import { Types } from "mongoose";
 import { AuthRequest } from "../middleware/authMiddleware";
-import Board from "../models/Board";
+import { BadRequestError, ConflictError } from "../errors/AppError";
 import Column from "../models/Column";
-import { getTeamAccess } from "../utils/teamAccess";
+import Task from "../models/Task";
+import { requireBoardAccess, requireColumnAccess } from "../utils/teamAccess";
+
+async function validateAllowedTransitions(
+  boardId: string,
+  transitions: string[] | null,
+) {
+  if (transitions === null) return null;
+  const ids = [...new Set(transitions.map((id) => id.toLowerCase()))];
+  if (!ids.length) return [];
+  const destinations = await Column.find({
+    _id: { $in: ids },
+    boardId,
+    deletedAt: null,
+  });
+  if (destinations.length !== ids.length) {
+    throw new BadRequestError(
+      "Allowed transitions must target active columns in the same board.",
+    );
+  }
+  return ids.map((id) => new Types.ObjectId(id));
+}
 
 export async function createColumn(request: AuthRequest, response: Response) {
-  try {
-    const { boardId } = request.params;
-    const { title, position } = request.body ?? {};
-
-    if (
-      typeof title !== "string" ||
-      !title.trim() ||
-      typeof position !== "number" ||
-      !Number.isFinite(position)
-    ) {
-      return response
-        .status(400)
-        .json({ message: "Column title and numeric position are required." });
-    }
-
-    if (typeof boardId !== "string" || !isValidObjectId(boardId)) {
-      return response.status(404).json({ message: "Board not found." });
-    }
-
-    const board = await Board.findById(boardId);
-
-    if (!board) {
-      return response.status(404).json({ message: "Board not found." });
-    }
-
-    const { team, role } = await getTeamAccess(
-      board.teamId.toString(),
-      request.userId!,
-    );
-
-    if (!team) {
-      return response.status(404).json({ message: "Team not found." });
-    }
-
-    if (role !== "admin") {
-      return response.status(403).json({ message: "Admin access is required." });
-    }
-
-    const column = await Column.create({
-      title: title.trim(),
-      boardId,
-      position,
-    });
-
-    return response.status(201).json(column);
-  } catch (error) {
-    console.error("Could not create column:", error);
-    return response.status(500).json({ message: "Could not create column." });
-  }
+  const { board } = await requireBoardAccess(
+    request.params.boardId as string,
+    request.userId!,
+    true,
+  );
+  const { title, position, allowedTransitions = null } = request.body;
+  const transitions = await validateAllowedTransitions(
+    board._id.toString(),
+    allowedTransitions,
+  );
+  const column = await Column.create({
+    title,
+    boardId: board._id,
+    position,
+    allowedTransitions: transitions,
+  });
+  return response.status(201).json(column);
 }
 
 export async function getColumns(request: AuthRequest, response: Response) {
-  try {
-    const { boardId } = request.params;
+  const { board } = await requireBoardAccess(
+    request.params.boardId as string,
+    request.userId!,
+  );
+  return response.json(
+    await Column.find({ boardId: board._id, deletedAt: null }).sort({
+      position: 1,
+      _id: 1,
+    }),
+  );
+}
 
-    if (typeof boardId !== "string" || !isValidObjectId(boardId)) {
-      return response.status(404).json({ message: "Board not found." });
-    }
+export async function getColumn(request: AuthRequest, response: Response) {
+  const { column } = await requireColumnAccess(
+    request.params.columnId as string,
+    request.userId!,
+  );
+  return response.json(column);
+}
 
-    const board = await Board.findById(boardId);
-
-    if (!board) {
-      return response.status(404).json({ message: "Board not found." });
-    }
-
-    const { team, role } = await getTeamAccess(
-      board.teamId.toString(),
-      request.userId!,
+export async function updateColumn(request: AuthRequest, response: Response) {
+  const { column, board } = await requireColumnAccess(
+    request.params.columnId as string,
+    request.userId!,
+    true,
+  );
+  const { title, position, allowedTransitions } = request.body;
+  if (title !== undefined) column.title = title;
+  if (position !== undefined) column.position = position;
+  if (allowedTransitions !== undefined) {
+    column.allowedTransitions = await validateAllowedTransitions(
+      board._id.toString(),
+      allowedTransitions,
     );
-
-    if (!team) {
-      return response.status(404).json({ message: "Team not found." });
-    }
-
-    if (!role) {
-      return response.status(403).json({ message: "Team access is required." });
-    }
-
-    const columns = await Column.find({ boardId }).sort({ position: 1 });
-    return response.json(columns);
-  } catch (error) {
-    console.error("Could not get columns:", error);
-    return response.status(500).json({ message: "Could not get columns." });
   }
+  await column.save();
+  return response.json(column);
+}
+
+export async function deleteColumn(request: AuthRequest, response: Response) {
+  const { column } = await requireColumnAccess(
+    request.params.columnId as string,
+    request.userId!,
+    true,
+  );
+  if (await Task.exists({ columnId: column._id, deletedAt: null })) {
+    throw new ConflictError(
+      "A column containing active tasks cannot be deleted.",
+    );
+  }
+  column.deletedAt = new Date();
+  await column.save();
+  return response.json({ message: "Column deleted successfully." });
 }

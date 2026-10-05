@@ -1,22 +1,26 @@
 import { model, Schema } from "mongoose";
-
-const columnSchema = new Schema({
-  title: {
-    type: String,
-    required: true,
-    trim: true,
+import { IColumn } from "../interfaces/models";
+const columnSchema = new Schema<IColumn>(
+  {
+    title: { type: String, required: true, trim: true, maxlength: 200 },
+    boardId: {
+      type: Schema.Types.ObjectId,
+      ref: "Board",
+      required: true,
+      index: true,
+    },
+    position: {
+      type: Number,
+      required: true,
+      min: 0,
+      validate: Number.isInteger,
+    },
+    allowedTransitions: {
+      type: [{ type: Schema.Types.ObjectId, ref: "Column" }],
+      default: null,
+    },
+    deletedAt: { type: Date, default: null },
   },
-  boardId: {
-    type: Schema.Types.ObjectId,
-    ref: "Board",
-    required: true,
-  },
-  position: {
-    type: Number,
-    required: true,
-  },
-});
-
-const Column = model("Column", columnSchema);
-
-export default Column;
+  { timestamps: true },
+);
+export default model<IColumn>("Column", columnSchema);
