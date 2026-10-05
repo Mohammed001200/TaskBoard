@@ -227,7 +227,15 @@ Testerna verifierar inte din Atlas-konfiguration eller en molndriftsättning. Ko
 4. Kör eventuell legacy-migrering mot rätt databas från en betrodd miljö. Skapa önskat admin-konto och kör admin-kommandot separat vid behov.
 5. Driftsätt och verifiera `/health`, login och ett helt flöde mot den URL som Render faktiskt tilldelar tjänsten. En health-respons ersätter inte kontrollen av databaslagring.
 
-Det finns ingen verifierad live-URL dokumenterad här ännu. Lägg till den först när tjänsten har driftsatts och kontrollerats.
+## Live API
+
+TaskBoard är driftsatt på Render:
+
+https://taskboard-api-yhpc.onrender.com
+
+Health check:
+
+https://taskboard-api-yhpc.onrender.com/health
 
 Konfigurationsreferenser: [Render Blueprint](https://render.com/docs/blueprint-spec), [Node-version på Render](https://render.com/docs/node-version) och [npm include](https://docs.npmjs.com/cli/v11/using-npm/config#include).
 
